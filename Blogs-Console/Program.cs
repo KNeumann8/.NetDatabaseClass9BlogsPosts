@@ -3,6 +3,7 @@ using BlogsConsole.Models;
 using System;
 using System.Linq;
 using System.Collections;
+using System.Collections.Generic;
 
 namespace BlogsConsole
 {
@@ -30,7 +31,7 @@ namespace BlogsConsole
                         try
                         {
                             userChoice = int.Parse(input);
-                            if (userChoice > 4 || userChoice <= 0)
+                            if (userChoice > 5 || userChoice <= 0)
                             {
                                 FormatException e = new FormatException();
                                 throw e;
@@ -51,15 +52,23 @@ namespace BlogsConsole
                     switch (userChoice)
                     {
                         case 1:
+                            logger.Info("Option 1 Choosen");
                             displayBlogs();
                             break;
                         case 2:
+                            logger.Info("Option 2 Choosen");
                             createBlog();
                             break;
                         case 3:
+                            logger.Info("Option 3 Choosen");
                             createPost();
                             break;
                         case 4:
+                            logger.Info("Option 4 Choosen");
+                            displayPosts();
+                            break;
+                        case 5:
+                            logger.Info("Option 5 Choosen");
                             masterLoopControl = false;
                             break;
                     }
@@ -82,14 +91,27 @@ namespace BlogsConsole
             Console.WriteLine("1: View Blog Listings");
             Console.WriteLine("2: Create New Blog");
             Console.WriteLine("3: Add New Post to Blog");
-            Console.WriteLine("4: Exit");
+            Console.WriteLine("4: Display Posts");
+            Console.WriteLine("5: Exit");
         }
 
         private static void createBlog()
         {
             // Create and save a new Blog
-            Console.Write("Enter a name for a new Blog: ");
-            var name = Console.ReadLine();
+            string name;
+            bool isValidName;
+            do
+            {
+                isValidName = true;
+                Console.Write("Enter a name for a new Blog: ");
+                name = Console.ReadLine();
+                if (name.Equals("") || name.Equals(" "))
+                {
+                    logger.Error("Cannot have blank Blog name!");
+                    isValidName = false;
+                }
+            } while (!isValidName);
+            
 
             var blog = new Blog { Name = name };
 
@@ -102,7 +124,9 @@ namespace BlogsConsole
         {
             // Display all Blogs from the database
             var db = new BloggingContext();
-            var query = db.Blogs.OrderBy(b => b.Name);
+            var query = db.Blogs.OrderBy(b => b.BlogId);
+
+            Console.WriteLine(query.ToList().Count+" Blogs Returned");
 
             Console.WriteLine("All blogs in the database:");
             foreach (var item in query)
@@ -119,7 +143,7 @@ namespace BlogsConsole
 
             //Display all blogs for user to pick from
             Console.WriteLine("All blogs in the database:");      
-            var queryOne = db.Blogs.OrderBy(b => b.Name);
+            var queryOne = db.Blogs.OrderBy(b => b.BlogId);
             ArrayList blogIDs = new ArrayList();
             foreach (var item in queryOne)
             {
@@ -147,10 +171,15 @@ namespace BlogsConsole
                     }
                     if (!isThere)
                     {
-                        logger.Info("The Blog You Choose Dosen't Exist");
+                        logger.Error("The Blog You Choose To Post To Dosen't Exist");
                         //Perhaps the Archives are Incomplete?....
                         loopControl = true;
                     }
+                }
+                catch(FormatException)
+                {
+                    loopControl = true;
+                    logger.Error("Invlaid Blog ID");
                 }
                 catch(Exception e)
                 {
@@ -159,21 +188,25 @@ namespace BlogsConsole
                 }
             } while (loopControl);
 
-            //ask for blog title
+            //ask for post title
             string title = "";
+            bool validTitle;
             do
             {
+                validTitle = true;
                 Console.WriteLine("Insert Post Title: ");
                 title = Console.ReadLine();
-            } while (title.Length <= 1);
+                if(title.Equals("")||title.Equals(" "))
+                {
+                    logger.Error("Post Title Cannot be Blank");
+                    validTitle = false;
+                }
+            } while (!validTitle);
 
             //Ask for blog content
-            string content = "";
-            do
-            {
-                Console.WriteLine("Type Content for Post: ");
-                content = Console.ReadLine();
-            } while (content.Length <= 1);
+            Console.WriteLine("Type Content for Post: ");
+            string content = Console.ReadLine();
+            
 
             //Add post the database
             Post newPost = new Post
@@ -183,7 +216,97 @@ namespace BlogsConsole
                 Content = content
             };
             db.AddPost(newPost);
-            logger.Info("Post added - {title}", title);
+            logger.Info("Post added - {title}, to blogID - {userChoice}", title,userChoice);
+        }
+
+        private static void displayPosts()
+        {
+            //Display Posts By Blog
+
+            var db = new BloggingContext();
+
+            //Display Blogs By ID:
+            
+            var queryOne = db.Blogs.OrderBy(b => b.BlogId);
+            ArrayList blogIDs = new ArrayList();
+            Console.WriteLine("0: Print All Posts");
+            foreach (var item in queryOne)
+            {
+                Console.WriteLine(item.BlogId + ": Posts from " + item.Name);
+                blogIDs.Add(item.BlogId);
+            }
+
+            //Force correct choice
+            bool loopControl;
+            int userChoice = 0;
+            do
+            {
+                loopControl = false;
+                Console.WriteLine("Select where to display posts from:");
+                string input = Console.ReadLine();
+
+                try
+                {
+                    userChoice = int.Parse(input);
+                    //check if user's choice is in database:
+                    bool isThere = false;
+                    if (userChoice == 0) isThere = true;
+                    else
+                    {
+                        foreach (int id in blogIDs)
+                        {
+                            if (id == userChoice) isThere = true;
+                        }
+                        if (!isThere)
+                        {
+                            logger.Error("The Blog You Choose To Post To Dosen't Exist");
+                            //Perhaps the Archives are Incomplete?....
+                            loopControl = true;
+                        }
+                    }                  
+                }
+                catch (FormatException)
+                {
+                    loopControl = true;
+                    logger.Error("Invlaid Blog ID");
+                }
+                catch (Exception e)
+                {
+                    loopControl = true;
+                    logger.Error(e.Message);
+                }
+            } while (loopControl);
+
+
+            if(userChoice == 0)
+            {
+                List<Post> posts = db.Posts.OrderBy( p => p.BlogId).ToList();
+                Console.WriteLine(posts.Count() + " posts returned");
+                foreach(Post post in posts)
+                {
+                    List<Blog> blogs = db.Blogs.Where(b => b.BlogId == post.BlogId).ToList();
+                    string blogName = "Nothing";
+                    foreach (Blog b in blogs) blogName = b.Name;
+                    Console.WriteLine("Blog: " + blogName);
+                    Console.WriteLine("Title: " + post.Title);
+                    Console.WriteLine("Content: " + post.Content);
+                }
+            }
+            else
+            {
+                List<Post> posts = db.Posts.Where(p => p.BlogId == userChoice).ToList();
+                Console.WriteLine(posts.Count() + " posts returned");
+                foreach (Post post in posts)
+                {
+                    List<Blog> blogs = db.Blogs.Where(b => b.BlogId == post.BlogId).ToList();
+                    string blogName = "Nothing";
+                    foreach (Blog b in blogs) blogName = b.Name;
+                    Console.WriteLine("Blog: " + blogName);
+                    Console.WriteLine("Title: " + post.Title);
+                    Console.WriteLine("Content: " + post.Content);
+                }
+            }
+
         }
 
     }
